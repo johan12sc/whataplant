@@ -1,0 +1,4 @@
+cd c:\xampp\htdocs\WhatAPlant\service_ia
+py -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+autre terminal = C:\xampp\htdocs\WhatAPlant> 
+npx expo start --dev-client       
