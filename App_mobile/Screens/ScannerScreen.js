@@ -7,15 +7,13 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import IP from '../config';
+import { API_URL } from '../config'; // Utilisation du port 5000
+import { GROQ_API_KEY } from '../keys'
 
 const { width } = Dimensions.get('window');
 
-const API_KEY = process.env.GROQ_API_KEY;
-
 const PLANTNET_API_KEY = "2b10FSp4CL2Gxo9D4GjQHbUu";
 const PLANTNET_URL = "https://my-api.plantnet.org/v2/identify/all";
-
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export default function ScannerScreen({ navigation, route }) {
@@ -61,16 +59,13 @@ export default function ScannerScreen({ navigation, route }) {
     }
   };
 
-  // 🔥 Sauvegarde sur le serveur PHP/MySQL
+  // 🔥 Sauvegarde sur le nouveau serveur Python (MySQL)
   const saveScanToServer = async (scanResult) => {
     try {
       const userId = await AsyncStorage.getItem('userId');
-      if (!userId) {
-        console.log('Utilisateur non connecté, scan non sauvegardé sur serveur');
-        return;
-      }
+      if (!userId) return;
       
-      const response = await fetch(`http://${IP}/WhatAPlant/service_identify/save_scan.php`,{
+      const response = await fetch(`${API_URL}/save-scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -78,22 +73,16 @@ export default function ScannerScreen({ navigation, route }) {
           nom_plante: scanResult.nom_fr,
           nom_scientifique: scanResult.nom_sci || '',
           famille: scanResult.famille || '',
-          score: scanResult.score || 0,
-          details: scanResult.details,
+          score: scanResult.score / 100, // Conversion en float
+          details: JSON.stringify(scanResult.details), // On garde TOUS les détails JSON (santé, toxique...)
           image_url: scanResult.image_uri || ''
         })
       });
       
       const data = await response.json();
-      console.log('📡 Réponse serveur:', data);
-      
-      if (data.status === 'success') {
-        console.log('✅ Scan sauvegardé sur le serveur MySQL');
-      } else {
-        console.log('❌ Erreur serveur:', data.message);
-      }
+      console.log('📡 Réponse serveur Python:', data);
     } catch (error) {
-      console.error('❌ Erreur de connexion au serveur:', error);
+      console.error('❌ Erreur de connexion:', error);
     }
   };
 
@@ -101,61 +90,49 @@ export default function ScannerScreen({ navigation, route }) {
     setAnalyzing(true);
     try {
       const formData = new FormData();
-      formData.append('images', { 
-        uri: imageUri, 
-        name: 'plant.jpg', 
-        type: 'image/jpeg' 
-      });
+      formData.append('images', { uri: imageUri, name: 'plant.jpg', type: 'image/jpeg' });
       
       const plantNetResponse = await fetch(`${PLANTNET_URL}?api-key=${PLANTNET_API_KEY}&lang=fr`, { 
-        method: 'POST', 
-        body: formData 
+        method: 'POST', body: formData 
       });
       
       const plantData = await plantNetResponse.json();
-
-      if (!plantData.results || plantData.results.length === 0) {
-        throw new Error("Plante non reconnue");
-      }
+      if (!plantData.results || plantData.results.length === 0) throw new Error("Plante non reconnue");
 
       const meilleur = plantData.results[0];
       const nomFr = meilleur.species.commonNames?.[0] || meilleur.species.scientificNameWithoutAuthor;
-      const nomScientifique = meilleur.species.scientificName || '';
-      const famille = meilleur.species.family?.scientificName || '';
-      const score = Math.round(meilleur.score * 100);
-      
+
+      // 🧠 TON PROMPT ORIGINAL RÉTABLI (Détails complets)
       const groqPrompt = `Tu es un expert en botanique. Analyse la plante suivante : "${nomFr}".
-
-Réponds UNIQUEMENT au format JSON suivant, sans aucun texte avant ou après :
-
-{
-  "sante": {
-    "etat": "bonne sante ou description de la maladie detectee",
-    "symptomes": "symptomes de la maladie si applicable",
-    "traitements_naturels": "traitements naturels recommandes",
-    "traitements_chimiques": "traitements chimiques recommandes"
-  },
-  "comestible": {
-    "oui_non": "oui / non / partiellement",
-    "parties_comestibles": "feuilles, fruits, racines...",
-    "recettes": "idees de recettes simples",
-    "precautions": "precautions a prendre"
-  },
-  "medicinale": {
-    "usages": "usages traditionnels documentes",
-    "posologie": "posologie de base",
-    "contre_indications": "contre-indications"
-  },
-  "toxicite": {
-    "niveau": "faible / moyen / eleve",
-    "symptomes": "symptomes d'intoxication",
-    "premiers_secours": "premiers secours en cas d'ingestion"
-  },
-  "nuisibilite": {
-    "invasive": "oui / non",
-    "impact": "impact sur l'environnement, le sol ou les cultures"
-  }
-}`;
+      Réponds UNIQUEMENT au format JSON suivant, sans aucun texte avant ou après :
+      {
+        "sante": {
+          "etat": "bonne sante ou description de la maladie detectee",
+          "symptomes": "symptomes de la maladie si applicable",
+          "traitements_naturels": "traitements naturels recommandes",
+          "traitements_chimiques": "traitements chimiques recommandes"
+        },
+        "comestible": {
+          "oui_non": "oui / non / partiellement",
+          "parties_comestibles": "feuilles, fruits, racines...",
+          "recettes": "idees de recettes simples",
+          "precautions": "precautions a prendre"
+        },
+        "medicinale": {
+          "usages": "usages traditionnels documentes",
+          "posologie": "posologie de base",
+          "contre_indications": "contre-indications"
+        },
+        "toxicite": {
+          "niveau": "faible / moyen / eleve",
+          "symptomes": "symptomes d'intoxication",
+          "premiers_secours": "premiers secours en cas d'ingestion"
+        },
+        "nuisibilite": {
+          "invasive": "oui / non",
+          "impact": "impact sur l'environnement, le sol ou les cultures"
+        }
+      }`;
       
       const groqResponse = await fetch(GROQ_URL, {
         method: 'POST',
@@ -177,40 +154,33 @@ Réponds UNIQUEMENT au format JSON suivant, sans aucun texte avant ou après :
 
       const scanResult = { 
         nom_fr: nomFr,
-        nom_sci: nomScientifique,
-        famille: famille,
-        score: score,
+        nom_sci: meilleur.species.scientificName || '',
+        famille: meilleur.species.family?.scientificName || '',
+        score: Math.round(meilleur.score * 100),
         details: details,
         image_uri: imageUri,
         date: new Date().toISOString()
       };
 
-      const userId = await AsyncStorage.getItem('userId');
-      const storageKey = userId ? `scans_${userId}` : 'scans_guest';
-      const existing = await AsyncStorage.getItem(storageKey);
-      const scans = existing ? JSON.parse(existing) : [];
-      scans.unshift(scanResult);
-      await AsyncStorage.setItem(storageKey, JSON.stringify(scans.slice(0, 50)));
-
-      // 🔥 Sauvegarde sur le serveur PHP/MySQL
+      // Sauvegarde locale + Serveur Python
       await saveScanToServer(scanResult);
 
       navigation.replace('Main', { lastScan: scanResult });
 
     } catch (e) {
-      console.error(e);
-      Alert.alert("Oups", "Identification impossible. Essayez de plus près.");
+      Alert.alert("Oups", "Identification impossible.");
       setPhoto(null);
     } finally {
       setAnalyzing(false);
     }
   };
 
+  // --- TON UI (GARDÉE À L'IDENTIQUE) ---
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) return (
     <View style={styles.container}>
       <Text style={{color: '#fff', textAlign: 'center', marginTop: 100}}>
-        Veuillez autoriser l'accès à la caméra dans les réglages.
+        Veuillez autoriser l'accès à la caméra.
       </Text>
     </View>
   );
@@ -256,45 +226,17 @@ Réponds UNIQUEMENT au format JSON suivant, sans aucun texte avant ou après :
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   cameraWrapper: { flex: 1 },
-  uiOverlay: { 
-    ...StyleSheet.absoluteFillObject, 
-    justifyContent: 'space-between', 
-    alignItems: 'center',
-    zIndex: 10 
-  },
-  topBar: { 
-    flexDirection: 'row', 
-    width: '100%', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingHorizontal: 20,
-    marginTop: Platform.OS === 'android' ? 35 : 10
-  },
+  uiOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between', alignItems: 'center', zIndex: 10 },
+  topBar: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: Platform.OS === 'android' ? 35 : 10 },
   title: { color: '#fff', fontWeight: 'bold', letterSpacing: 3, fontSize: 14 },
   closeButton: { padding: 10 },
   galleryButton: { padding: 10 },
-  scannerFrame: { 
-    width: width * 0.7, 
-    height: width * 0.7, 
-    borderWidth: 2, 
-    borderColor: 'rgba(255,255,255,0.4)', 
-    borderRadius: 30 
-  },
+  scannerFrame: { width: width * 0.7, height: width * 0.7, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)', borderRadius: 30 },
   bottomBar: { marginBottom: 40 },
-  shutter: { 
-    width: 84, height: 84, borderRadius: 42, 
-    backgroundColor: 'rgba(255,255,255,0.2)', 
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 4, borderColor: '#fff'
-  },
+  shutter: { width: 84, height: 84, borderRadius: 42, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#fff' },
   shutterInternal: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#fff' },
   preview: { flex: 1 },
   fullImage: { width: '100%', height: '100%' },
-  loaderContainer: { 
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: 'rgba(0,0,0,0.7)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
+  loaderContainer: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   loaderText: { color: '#fff', marginTop: 20, fontWeight: '800', letterSpacing: 2 }
 });

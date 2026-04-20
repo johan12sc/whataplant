@@ -1,34 +1,42 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ImageBackground, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ImageBackground, StyleSheet, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import IP from '../config';
+import { API_URL } from '../config'; // On utilise l'URL complète avec le port 5000
 
-export default function LoginScreen({navigation}) {
+export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // connection au serveur php
-
   const sendLogin = async () => {
-  try {
-    const response = await fetch(`http://${IP}/WhatAPlant/service_identify/connexion.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-
-    const data = await response.json();
-    
-    if(data.status === 'success') {
-      await AsyncStorage.setItem('userId', data.user.id.toString());
-      navigation.navigate('Main');
-    } else {
-      alert(data.message);
+    // Vérification simple avant l'envoi
+    if (!email || !password) {
+      Alert.alert("Erreur", "Veuillez remplir tous les champs.");
+      return;
     }
-  } catch(error) {
-    alert('Erreur : ' + error.message);
-  }
-};
+
+    try {
+      const response = await fetch(`${API_URL}/login`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        // Sauvegarde de l'ID utilisateur (important pour l'historique et l'IA)
+        await AsyncStorage.setItem('userId', data.user.id.toString());
+        await AsyncStorage.setItem('userName', data.user.nom); // On garde son nom pour l'accueil
+        
+        navigation.navigate('Main');
+      } else {
+        Alert.alert("Echec de connexion", data.message);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Erreur", "Impossible de contacter le serveur Python. Vérifie que uvicorn est lancé.");
+    }
+  };
 
   return (
     <ImageBackground
@@ -36,9 +44,7 @@ export default function LoginScreen({navigation}) {
       style={styles.background}
     >
       <View style={styles.overlay}>
-
         <View style={styles.card}>
-
           <Text style={styles.titre}>Connexion</Text>
           <Text style={styles.sousTitre}>Bon retour parmi nous 🌿</Text>
 
@@ -49,6 +55,7 @@ export default function LoginScreen({navigation}) {
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
+            autoCapitalize="none"
           />
 
           <TextInput
@@ -60,44 +67,32 @@ export default function LoginScreen({navigation}) {
             secureTextEntry={true}
           />
 
-          <TouchableOpacity style={styles.bouton}
-          onPress={sendLogin}
-          >
+          <TouchableOpacity style={styles.bouton} onPress={sendLogin}>
             <Text style={styles.boutonTexte}>Se connecter</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.lien}
-          onPress={() => navigation.navigate('Signup')}
-          >
+          <TouchableOpacity style={styles.lien} onPress={() => navigation.navigate('Signup')}>
             <Text style={styles.lienTexte}>Pas encore de compte ? S'inscrire</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.lien}
-          onPress={()=>navigation.navigate('ForgotPassword')}
-          >
+          <TouchableOpacity style={styles.lien} onPress={() => navigation.navigate('ForgotPassword')}>
             <Text style={styles.lienTexte}>Mot de passe oublié ?</Text>
           </TouchableOpacity>
-
         </View>
-
       </View>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
-    flex: 1,
-  },
+  background: { flex: 1 },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     padding: 24,
   },
-  card: {
-    alignItems: 'center',
-  },
+  card: { alignItems: 'center' },
   titre: {
     fontSize: 32,
     fontWeight: 'bold',
@@ -129,16 +124,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
-  boutonTexte: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  lien: {
-    marginTop: 8,
-  },
-  lienTexte: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-  },
+  boutonTexte: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  lien: { marginTop: 8 },
+  lienTexte: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
 });

@@ -1,15 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import db_config
-import grok_client
+from db_config import get_db_connection
+import grok_client 
+from dotenv import load_dotenv
+load_dotenv()
 
-# ============================================
-# INITIALISATION
-# ============================================
-app = FastAPI(title="WhatAPlant IA Service")
+app = FastAPI()
 
-# Autoriser React Native à communiquer avec l'API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,71 +16,131 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============================================
-# MODÈLES DE DONNÉES
-# ============================================
-class QuestionRequest(BaseModel):
-    user_id: int
-    question: str
+# Modèles pour les requêtes
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class RegisterRequest(BaseModel):
+    nom: str
+    email: str
+    password: str
 
 class UserRequest(BaseModel):
     user_id: int
 
 # ============================================
-# ROUTES
+# ROUTES DE CONNEXION (Restaurées)
 # ============================================
-@app.get("/")
-def root():
-    return {"status": "online", "service": "WhatAPlant IA"}
+
+@app.post("/login")
+async def login(request: LoginRequest):
+    # Appelle la fonction verifier_login que tu as dans db_config
+    resultat = db_config.verifier_login(request.email, request.password)
+    return resultat
+
+@app.post("/register")
+async def register(request: RegisterRequest):
+    # Appelle la fonction creer_compte que tu as dans db_config
+    resultat = db_config.creer_compte(request.nom, request.email, request.password)
+    return resultat
+
+# ============================================
+# ROUTE DE CHAT IA
+# ============================================
 
 @app.post("/chat")
-async def chat(request: QuestionRequest):
-    """
-    Endpoint principal du chatbot
-    - Vérifie le cache
-    - Appelle Groq si besoin
-    - Sauvegarde et retourne
-    """
-    user_id = request.user_id
-    question = request.question
-    
-    print(f"📝 Reçu: user_id={user_id}, question={question[:50]}...")
-    
-    # 1. Vérifier si la question existe déjà dans l'historique
-    existe = db_config.chercher_historique(user_id, question)
-    
-    if existe:
-        print("✅ Trouvé dans historique!")
+async def chat_bot(request: Request):
+    try:
+        data = await request.json()
+        user_id = data.get("user_id")
+        question = data.get("question")
+
+        # 1. Appel du client Groq & Wikimedia
+        reponse_ia, image_url = await grok_client.appeler_groq(question)
+
+        # 2. Sauvegarde dans la base de données
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            query = """
+                INSERT INTO historique_conversations (user_id, question, reponse, image_url) 
+                VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(query, (user_id, question, reponse_ia, image_url))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            print(f"✅ Historique stocké pour l'user {user_id}")
+        except Exception as db_err:
+            print(f"❌ Erreur Stockage Base: {db_err}")
+
         return {
-            "status": "success",
-            "from_cache": True,
-            "reponse": existe["reponse"],
-            "image_url": existe["image_url"]
+            "status": "success", 
+            "reponse": reponse_ia, 
+            "image_url": image_url
         }
-    
-    # 2. Appeler Groq pour obtenir réponse + image
-    # ✅ CORRIGÉ : passer user_id
-    reponse, image_url = await grok_client.appeler_groq(question, user_id)
-    
-    # 3. Sauvegarder la conversation
-    db_config.sauvegarder_conversation(user_id, question, reponse, image_url)
-    
+    except Exception as e:
+        print(f"❌ Erreur Route Chat: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+# ============================================
+# ROUTE HISTORIQUE
+# ============================================
+
+@app.post("/historique-ia")
+async def get_historique_ia(request: UserRequest):
+    try:
+        # On récupère les données via db_config
+        conversations = db_config.get_user_conversations(request.user_id)
+        
+        # Ce print s'affichera dans ton terminal Python pour nous aider à débugger
+        print(f"--- Debug Historique IA ---")
+        print(f"User ID reçu: {request.user_id}")
+        print(f"Nombre de conversations trouvées: {len(conversations)}")
+        
+        return {
+            "status": "success", 
+            "conversations": conversations
+        }
+    except Exception as e:
+        print(f"❌ Erreur Route Historique IA: {str(e)}")
+        return {"status": "error", "message": str(e), "conversations": []}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
+
+@app.get("/scans/{user_id}")
+async def get_scans(user_id: int):
+    # On récupère les données via la fonction corrigée au-dessus
+    scans = db_config.get_historique_scans(user_id)
+    # Le JS attend la clé "scans" et un status "success"
     return {
         "status": "success",
-        "from_cache": False,
-        "reponse": reponse,
-        "image_url": image_url
+        "scans": scans
     }
-    
-@app.post("/historique")
-async def get_historique(request: UserRequest):
-    """
-    Récupère l'historique des conversations d'un utilisateur
-    """
-    user_id = request.user_id
-    conversations = db_config.get_user_conversations(user_id)
-    
-    return {
-        "status": "success",
-        "conversations": conversations
-    }
+
+# ============================================
+# ROUTE POUR SAUVEGARDER UN SCAN
+# ============================================
+@app.post("/save-scan")
+async def save_scan(request: Request):
+    try:
+        data = await request.json()
+        user_id = data.get('user_id')
+        nom_plante = data.get('nom_plante')
+        nom_scientifique = data.get('nom_scientifique')
+        famille = data.get('famille')
+        score = data.get('score')
+        details = data.get('details')
+        image_url = data.get('image_url')
+        
+        result = db_config.sauvegarder_scan(
+            user_id, nom_plante, nom_scientifique,
+            famille, score, details, image_url
+        )
+        return result
+    except Exception as e:
+        print(f"❌ Erreur sauvegarde scan: {e}")
+        return {"status": "error", "message": str(e)}

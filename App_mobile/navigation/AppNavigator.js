@@ -12,6 +12,8 @@ import HistoriqueIAScreen from '../Screens/HistoriqueIAScreen';
 import ScannerScreen from '../Screens/ScannerScreen';
 import ScanResult from '../Screens/ScanResult';
 import HistoriqueScansScreen from '../Screens/HistoriqueScansScreen';
+// import RessourcesScreen from '../Screens/RessourcesScreen';
+// import VisualiserPDFScreen from '../Screens/VisualiserPDFScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -32,6 +34,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Scanner" component={ScannerScreen} /> 
         <Stack.Screen name="ScanResult" component={ScanResult} />
         <Stack.Screen name="HistoriqueScans" component={HistoriqueScansScreen} />
+        {/* <Stack.Screen name="Ressources" component={RessourcesScreen} />
+        <Stack.Screen name="VisualiserPDF" component={VisualiserPDFScreen} /> */}
       </Stack.Navigator>
     </NavigationContainer>
   );

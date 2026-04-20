@@ -3,8 +3,13 @@ import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ScanResult({ navigation, route }) {
+  // On récupère le scan passé en paramètre
   const { scan } = route.params;
-  const details = scan.details || {};
+
+  // Sécurité : Si les détails arrivent en format texte (depuis la DB), on les transforme en objet
+  const details = typeof scan.details === 'string' 
+    ? JSON.parse(scan.details) 
+    : (scan.details || {});
 
   return (
     <View style={styles.container}>
@@ -18,8 +23,13 @@ export default function ScanResult({ navigation, route }) {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         
-        <Image source={{ uri: scan.image_uri }} style={styles.plantImage} />
-        <Text style={styles.plantName}>{scan.nom_fr}</Text>
+        {/* On affiche l'image capturée (ou l'URL de la base de données) */}
+        <Image 
+          source={{ uri: scan.image_uri || scan.image_url }} 
+          style={styles.plantImage} 
+        />
+        
+        <Text style={styles.plantName}>{scan.nom_fr || scan.nom_plante}</Text>
         
         {/* 1. SANTÉ */}
         <View style={styles.section}>
@@ -29,7 +39,7 @@ export default function ScanResult({ navigation, route }) {
           </View>
           <Text style={styles.sectionText}>
             <Text style={styles.label}>État : </Text>
-            {details.sante?.etat || "Non disponible"}
+            {details.sante?.etat || "Analyse en cours..."}
           </Text>
           {details.sante?.symptomes && (
             <Text style={styles.sectionText}>
@@ -43,40 +53,22 @@ export default function ScanResult({ navigation, route }) {
               {details.sante.traitements_naturels}
             </Text>
           )}
-          {details.sante?.traitements_chimiques && (
-            <Text style={styles.sectionText}>
-              <Text style={styles.label}>🧪 Traitements chimiques : </Text>
-              {details.sante.traitements_chimiques}
-            </Text>
-          )}
         </View>
 
         {/* 2. COMESTIBLE */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="restaurant-outline" size={24} color="#32C59A" />
-            <Text style={styles.sectionTitle}>🍽️ Comestible ?</Text>
+            <Text style={styles.sectionTitle}>🍽️ Comestibilité</Text>
           </View>
           <Text style={styles.sectionText}>
             <Text style={styles.label}>Réponse : </Text>
-            {details.comestible?.oui_non || "Non disponible"}
+            {details.comestible?.oui_non || "Non spécifié"}
           </Text>
-          {details.comestible?.parties_comestibles && (
-            <Text style={styles.sectionText}>
-              <Text style={styles.label}>Parties comestibles : </Text>
-              {details.comestible.parties_comestibles}
-            </Text>
-          )}
           {details.comestible?.recettes && (
             <Text style={styles.sectionText}>
               <Text style={styles.label}>🍳 Recettes : </Text>
               {details.comestible.recettes}
-            </Text>
-          )}
-          {details.comestible?.precautions && (
-            <Text style={styles.sectionText}>
-              <Text style={styles.label}>⚠️ Précautions : </Text>
-              {details.comestible.precautions}
             </Text>
           )}
         </View>
@@ -87,24 +79,9 @@ export default function ScanResult({ navigation, route }) {
             <Ionicons name="fitness-outline" size={24} color="#32C59A" />
             <Text style={styles.sectionTitle}>💊 Propriétés médicinales</Text>
           </View>
-          {details.medicinale?.usages && (
-            <Text style={styles.sectionText}>
-              <Text style={styles.label}>Usages : </Text>
-              {details.medicinale.usages}
-            </Text>
-          )}
-          {details.medicinale?.posologie && (
-            <Text style={styles.sectionText}>
-              <Text style={styles.label}>Posologie : </Text>
-              {details.medicinale.posologie}
-            </Text>
-          )}
-          {details.medicinale?.contre_indications && (
-            <Text style={styles.sectionText}>
-              <Text style={styles.label}>Contre-indications : </Text>
-              {details.medicinale.contre_indications}
-            </Text>
-          )}
+          <Text style={styles.sectionText}>
+            {details.medicinale?.usages || "Aucun usage documenté trouvé."}
+          </Text>
         </View>
 
         {/* 4. TOXICITÉ */}
@@ -115,18 +92,11 @@ export default function ScanResult({ navigation, route }) {
           </View>
           <Text style={styles.sectionText}>
             <Text style={styles.label}>Niveau : </Text>
-            {details.toxicite?.niveau || "Non disponible"}
+            {details.toxicite?.niveau || "Inconnu"}
           </Text>
           {details.toxicite?.symptomes && (
             <Text style={styles.sectionText}>
-              <Text style={styles.label}>Symptômes : </Text>
               {details.toxicite.symptomes}
-            </Text>
-          )}
-          {details.toxicite?.premiers_secours && (
-            <Text style={styles.sectionText}>
-              <Text style={styles.label}>Premiers secours : </Text>
-              {details.toxicite.premiers_secours}
             </Text>
           )}
         </View>
@@ -138,17 +108,11 @@ export default function ScanResult({ navigation, route }) {
             <Text style={styles.sectionTitle}>🌍 Impact environnemental</Text>
           </View>
           <Text style={styles.sectionText}>
-            <Text style={styles.label}>Espèce invasive : </Text>
-            {details.nuisibilite?.invasive || "Non disponible"}
+            {details.nuisibilite?.impact || "Aucun impact majeur signalé."}
           </Text>
-          {details.nuisibilite?.impact && (
-            <Text style={styles.sectionText}>
-              <Text style={styles.label}>Impact : </Text>
-              {details.nuisibilite.impact}
-            </Text>
-          )}
         </View>
 
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );

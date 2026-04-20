@@ -1,131 +1,107 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, Image, SafeAreaView } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import IP from '../config';
+import { API_URL } from '../config'; // Ton fichier config avec l'IP et le port 5000
 
-// Configuration de l'API - pour FastAPI (port 8000)
-const API_URL = `http://${IP}:8000`;  // ← PORT 8000, pas 8080 !
+const HistoriqueIAScreen = () => {
+    const [conversations, setConversations] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-export default function HistoriqueIAScreen({ navigation }) {
-  const [conversations, setConversations] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const getHistory = async () => {
-      const userId = await AsyncStorage.getItem('userId');
-      if (userId) {
-        fetchHistorique(parseInt(userId));
-      } else {
-        navigation.navigate('Home');
-      }
-    };
-    getHistory();
-  }, []);
-
-  const fetchHistorique = async (userId) => {
+    // Fonction pour récupérer l'historique depuis Python
+    const fetchHistorique = async () => {
     try {
-      const response = await fetch(`${API_URL}/historique`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId })
-      });
-
-      const data = await response.json();
-      setConversations(data.conversations || []);
-    } catch (error) {
-      console.error(error);
-      alert('Erreur: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const openConversation = (item) => {
-    navigation.navigate('ServiceIA', {
-      prefillQuestion: item.question,
-      prefillAnswer: item.reponse,
-      prefillImage: item.image_url
-    });
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color="#1D9E75" />
-        <Text>Chargement...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtn}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>📋 Historique IA</Text>
-        <View style={{ width: 30 }} />
-      </View>
-
-      <FlatList
-        data={conversations}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => openConversation(item)}>
-            <Text style={styles.date}>{item.date}</Text>
-            <Text style={styles.question}>{item.question}</Text>
-            <Text style={styles.reponse} numberOfLines={2}>{item.reponse}</Text>
-            {item.image_url && (
-              <Text style={styles.hasImage}>📷 Avec image</Text>
-            )}
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>📭</Text>
-            <Text style={styles.emptyTitle}>Aucun historique</Text>
-            <Text style={styles.emptySubtitle}>
-              Pose des questions à l'assistant pour commencer
-            </Text>
-          </View>
+        setLoading(true);
+        // Utiliser la clé 'userId' comme dans LoginScreen
+        const userId = await AsyncStorage.getItem('userId');
+        if (userId) {
+            const response = await fetch(`${API_URL}/historique-ia`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: parseInt(userId) }),
+            });
+            const data = await response.json();
+            if (data.status === 'success') {
+                setConversations(data.conversations);
+            }
         }
-      />
-    </View>
-  );
-}
+    } catch (error) {
+        console.error("Erreur récupération historique:", error);
+    } finally {
+        setLoading(false);
+    }
+};
+
+    // focusEffect permet de recharger les données chaque fois qu'on clique sur l'onglet
+    useFocusEffect(
+        useCallback(() => {
+            fetchHistorique();
+        }, [])
+    );
+
+    const renderItem = ({ item }) => (
+        <View style={styles.card}>
+            {/* Affichage de l'image Wikimedia si elle existe */}
+            {item.image_url ? (
+                <Image 
+                    source={{ uri: item.image_url }} 
+                    style={styles.imagePlat} 
+                    resizeMode="cover"
+                />
+            ) : (
+                <View style={[styles.imagePlat, styles.placeholderImage]}>
+                    <Text style={styles.placeholderText}>Pas d'image</Text>
+                </View>
+            )}
+
+            <View style={styles.content}>
+                <Text style={styles.question}>🍴 {item.question}</Text>
+                <Text style={styles.reponse}>{item.reponse}</Text>
+                <Text style={styles.date}>{item.created_at || "Date inconnue"}</Text>
+            </View>
+        </View>
+    );
+
+    return (
+        <SafeAreaView style={styles.container}>
+            <Text style={styles.headerTitle}>Mes Recettes & Conseils</Text>
+            {loading ? (
+                <ActivityIndicator size="large" color="#2E7D32" style={{ marginTop: 20 }} />
+            ) : (
+                <FlatList
+                    data={conversations}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={renderItem}
+                    contentContainerStyle={styles.list}
+                    ListEmptyComponent={<Text style={styles.empty}>Aucune conversation pour le moment.</Text>}
+                />
+            )}
+        </SafeAreaView>
+    );
+};
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  loadingScreen: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    paddingTop: 48,
-    backgroundColor: '#1D9E75',
-  },
-  backBtn: { fontSize: 24, color: '#fff', fontWeight: 'bold' },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  list: { padding: 16 },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  date: { fontSize: 11, color: '#888', marginBottom: 8 },
-  question: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-  reponse: { fontSize: 14, color: '#666' },
-  hasImage: { fontSize: 11, color: '#1D9E75', marginTop: 8 },
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyText: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#1D9E75', marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: '#888', textAlign: 'center' },
+    container: { flex: 1, backgroundColor: '#F5F5F5' },
+    headerTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginVertical: 15, color: '#2E7D32' },
+    list: { padding: 15 },
+    card: { 
+        backgroundColor: '#FFF', 
+        borderRadius: 12, 
+        marginBottom: 20, 
+        overflow: 'hidden',
+        elevation: 3, 
+        shadowColor: '#000', 
+        shadowOpacity: 0.1, 
+        shadowRadius: 5 
+    },
+    imagePlat: { width: '100%', height: 200 },
+    placeholderImage: { backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' },
+    placeholderText: { color: '#757575' },
+    content: { padding: 15 },
+    question: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+    reponse: { fontSize: 14, color: '#666', lineHeight: 20 },
+    date: { fontSize: 12, color: '#999', marginTop: 10, textAlign: 'right' },
+    empty: { textAlign: 'center', marginTop: 50, color: '#999' }
 });
+
+export default HistoriqueIAScreen;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ImageBackground, StyleSheet } from 'react-native';
-import IP from '../config';
+import { View, Text, TextInput, TouchableOpacity, ImageBackground, StyleSheet, Alert } from 'react-native';
+import { API_URL } from '../config'; // Utilisation de l'URL unifiée
 
 export default function SignupScreen({ navigation }) {
   const [nom, setNom] = useState('');
@@ -8,8 +8,15 @@ export default function SignupScreen({ navigation }) {
   const [password, setPassword] = useState('');
 
   const SendSignup = async () => {
+    // Vérification que les champs ne sont pas vides
+    if (!nom || !email || !password) {
+      Alert.alert("Champs manquants", "Merci de remplir toutes les informations.");
+      return;
+    }
+
     try {
-      const response = await fetch(`http://${IP}/WhatAPlant/service_identify/inscription.php`, {
+      // Appel au serveur Python (FastAPI)
+      const response = await fetch(`${API_URL}/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nom, email, password })
@@ -18,13 +25,15 @@ export default function SignupScreen({ navigation }) {
       const data = await response.json();
 
       if (data.status === 'success') {
-        alert('Compte créé avec succès ! 🌿');
+        Alert.alert('Succès', 'Compte créé avec succès ! 🌿');
         navigation.navigate('Login');
       } else {
-        alert(data.message);
+        // Affiche l'erreur venant du Python (ex: "Cet email existe déjà")
+        Alert.alert('Erreur', data.message);
       }
     } catch (error) {
-      alert('Erreur : ' + error.message);
+      console.error(error);
+      Alert.alert('Erreur', 'Connexion impossible au serveur Python (Signup).');
     }
   };
 
@@ -35,7 +44,6 @@ export default function SignupScreen({ navigation }) {
     >
       <View style={styles.overlay}>
         <View style={styles.card}>
-
           <Text style={styles.titre}>Créer un compte</Text>
           <Text style={styles.sousTitre}>Rejoins WhatAPlant 🌿</Text>
 
@@ -54,6 +62,7 @@ export default function SignupScreen({ navigation }) {
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
+            autoCapitalize="none" // Évite la majuscule automatique sur l'email
           />
 
           <TextInput
@@ -75,7 +84,6 @@ export default function SignupScreen({ navigation }) {
           >
             <Text style={styles.lienTexte}>Déjà un compte ? Se connecter</Text>
           </TouchableOpacity>
-
         </View>
       </View>
     </ImageBackground>

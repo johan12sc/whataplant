@@ -153,7 +153,7 @@ export default function MainScreen({ navigation, route }) {
                     { text: 'Service IA', icon: 'robot-outline', screen: 'ServiceIA', iconType: MaterialCommunityIcons },
                     { text: 'Historique IA', icon: 'chatbox-ellipses-outline', screen: 'HistoriqueIA', iconType: Ionicons },
                     { text: 'Historique scans', icon: 'leaf-outline', screen: 'HistoriqueScans', iconType: Ionicons },
-                    { text: 'Visualisation', icon: 'bar-chart-outline', screen: 'Visualisation', iconType: Ionicons },
+                    { text: 'Ressource', icon: 'bar-chart-outline', screen: 'Visualisation', iconType: Ionicons },
                   ].map((item, index) => (
                     <TouchableOpacity key={index} style={styles.menuItem} onPress={() => { setMenuOuvert(false); navigation.navigate(item.screen); }}>
                       <item.iconType name={item.icon} size={24} color="rgba(255,255,255,0.8)" />
