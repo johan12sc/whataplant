@@ -7,3 +7,5 @@ python-dotenv
 bcrypt
 requests
 yt-dlp
+duckduckgo-search
+ddgs
